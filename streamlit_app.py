@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import time
 from datetime import datetime
 from datetime import date
 from dateutil.relativedelta import relativedelta
@@ -45,15 +46,29 @@ def On_Balance_Volume(Close, Volume):
     OBV = np.cumsum(np.where(change > 0, Volume, np.where(change < 0, -Volume, 0)))
     return OBV
 
+def _download_with_retry(ticker, start, end, attempts=4):
+    last_err = None
+    for i in range(attempts):
+        try:
+            df = yf.download(ticker, start=start, end=end,
+                             progress=False, threads=False)
+            if not df.empty:
+                return df
+            last_err = "empty response"
+        except Exception as e:
+            last_err = e
+        time.sleep(2 ** i)  # 1s, 2s, 4s, 8s backoff
+    raise RuntimeError(f"yfinance returned no data for {ticker}: {last_err}")
+
 # Define function to retrieve data from Yahoo Finance API and conduct feature engineering
-@st.cache_data
+@st.cache_data(ttl=60 * 60, show_spinner=False)  # refresh hourly; don't cache failures
 def df_process(ticker):
     # Determine end and start dates for dataset download
     end = datetime.now()
-    start = end - relativedelta(months = 3)
+    start = end - relativedelta(months = 6)   # widened from 3 months for headroom
 
-    # Download data between start and end dates
-    df = yf.download(ticker, start = start, end = end)
+    # Download data between start and end dates (with retry)
+    df = _download_with_retry(ticker, start, end)
     # Fix column structure
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.droplevel(1)
@@ -84,14 +99,19 @@ def df_process(ticker):
     df['ma_3_days'] = df['close'].rolling(3).mean()
     return df
 
-# Call to fetch and engineer data 
-apple_df_processed = df_process(ticker_list[0])
-amazon_df_processed =  df_process(ticker_list[1])
-google_df_processed =  df_process(ticker_list[2])
-intel_df_processed =  df_process(ticker_list[3])
-meta_df_processed =  df_process(ticker_list[4])
-microsoft_df_processed =  df_process(ticker_list[5])
-tesla_df_processed =  df_process(ticker_list[6])
+
+# Call to fetch and engineer data
+try:
+    apple_df_processed = df_process(ticker_list[0])
+    amazon_df_processed = df_process(ticker_list[1])
+    google_df_processed = df_process(ticker_list[2])
+    intel_df_processed = df_process(ticker_list[3])
+    meta_df_processed = df_process(ticker_list[4])
+    microsoft_df_processed = df_process(ticker_list[5])
+    tesla_df_processed = df_process(ticker_list[6])
+except RuntimeError as e:
+    st.error(f"Market data is temporarily unavailable ({e}). Please refresh in a minute.")
+    st.stop()
 
 # List selected features
 apple_features = ['close', 'garman_klass_volatility', 'dollar_volume', 'obv', 'ma_3_days']
@@ -107,6 +127,11 @@ tesla_features = ['close', 'dollar_volume', 'obv', 'ema', 'ma_3_days']
 def create_feed_dset(df_processed, feature_list, n_past, model):
     dset = df_processed.filter(feature_list)
     dset.dropna(axis = 0, inplace = True)
+
+    # Guard: need more rows than the lookback window
+    if len(dset) <= n_past:
+        raise RuntimeError(
+            f"Only {len(dset)} usable rows after cleaning; need more than {n_past}.")
 
     # Scale the datasets
     scaler = MinMaxScaler(feature_range = (0, 1))
@@ -303,6 +328,7 @@ with tab2.col3:
         st.markdown(rsi_text)
 
 # Fetch and process data
+@st.cache_data(ttl=60 * 60, show_spinner=False)
 def load_data(ticker, start_date):
     stock_data = yf.download(ticker, start=start_date)
     if isinstance(stock_data.columns, pd.MultiIndex):
