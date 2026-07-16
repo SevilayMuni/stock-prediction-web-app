@@ -65,7 +65,7 @@ def _download_with_retry(ticker, start, end, attempts=4):
 def df_process(ticker):
     # Determine end and start dates for dataset download
     end = datetime.now()
-    start = end - relativedelta(months = 6)   # widened from 3 months for headroom
+    start = end - relativedelta(months = 3)  
 
     # Download data between start and end dates (with retry)
     df = _download_with_retry(ticker, start, end)
