@@ -163,8 +163,8 @@ def inverse_transform_predictions1(prediction_init, scaler):
     # Prepare the dataset for inverse transform
     prediction_array = np.repeat(prediction_init, 5, axis = -1)  # Repeat values along the last axis
 
-    # Perform the inverse transform and extract the first column
-    pred = scaler.inverse_transform(np.reshape(prediction_array, (len(prediction_init), 5)))[:5, 0]
+    # Perform the inverse transform, take the 5 most recent rows, newest first
+    pred = scaler.inverse_transform(np.reshape(prediction_array, (len(prediction_init), 5)))[-5:, 0][::-1]
     return pred
 
 # Inverse transformation for 6 features
@@ -172,8 +172,8 @@ def inverse_transform_predictions2(prediction_init, scaler):
     # Prepare the dataset for inverse transform
     prediction_array = np.repeat(prediction_init, 6, axis = -1)  # Repeat values along the last axis
 
-    # Perform the inverse transform and extract the first column
-    pred = scaler.inverse_transform(np.reshape(prediction_array, (len(prediction_init), 6)))[:5, 0]
+    # Perform the inverse transform, take the 5 most recent rows, newest first
+    pred = scaler.inverse_transform(np.reshape(prediction_array, (len(prediction_init), 6)))[-5:, 0][::-1]
     return pred
 
 # Get prediction list
